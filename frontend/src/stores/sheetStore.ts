@@ -1,15 +1,29 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { ScanItem } from '../types/scan'
-import type { Sheet } from '../types/sheet'
+import type { Sheet, SheetNeighbors } from '../types/sheet'
+import { createEmptyNeighbors } from '../types/sheet'
 import { createId, db, plain } from '../utils/db'
 import { sortByYear } from '../utils/scale'
 
-export type NewSheet = Omit<Sheet, 'id' | 'neighborCodes'> & {
-  neighborCodes?: string[]
+export type NewSheet = Omit<Sheet, 'id' | 'neighbors'> & {
+  neighbors: SheetNeighbors
 }
 export type NewScanItem = Omit<ScanItem, 'id'>
 
+/** 四个方向逐一规整：去空白，暂缺留空字符串。 */
+function normalizeNeighbors(input?: Partial<SheetNeighbors>): SheetNeighbors {
+  const base = createEmptyNeighbors()
+  if (!input) {
+    return base
+  }
+  return {
+    东: (input.东 ?? '').trim(),
+    南: (input.南 ?? '').trim(),
+    西: (input.西 ?? '').trim(),
+    北: (input.北 ?? '').trim(),
+  }
+}
 export const useSheetStore = defineStore('sheet', () => {
   const sheets = ref<Sheet[]>([])
   const allScans = ref<ScanItem[]>([])
@@ -48,7 +62,7 @@ export const useSheetStore = defineStore('sheet', () => {
     const sheet: Sheet = {
       ...input,
       id: createId('sheet'),
-      neighborCodes: input.neighborCodes ?? [],
+      neighbors: normalizeNeighbors(input.neighbors),
     }
     await db.sheets.add(plain(sheet))
     sheets.value = sortByYear([...sheets.value, sheet]).reverse()

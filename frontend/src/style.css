@@ -811,12 +811,54 @@ mark {
   border-style: dashed;
 }
 
+.neighbor-slot--pending {
+  background: rgba(252, 238, 236, 0.96);
+  border-color: #d98b82;
+}
+
+.neighbor-slot__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.neighbor-slot__heading .neighbor-slot__direction {
+  margin-bottom: 0;
+}
+
+.neighbor-slot__inbound {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #d3b9ad;
+  color: #b04a42 !important;
+}
+
+.neighbor-check-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.neighbor-check-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.neighbor-note__tag {
+  margin-left: 8px;
+}
+
 .slot-east { grid-area: 2 / 3; }
 .slot-south { grid-area: 3 / 2; }
 .slot-west { grid-area: 2 / 1; }
 .slot-north { grid-area: 1 / 2; }
-.slot-northeast { grid-area: 1 / 3; }
-.slot-southwest { grid-area: 3 / 1; }
 .slot-center { grid-area: 2 / 2; }
 
 .vacant-hint {
@@ -977,8 +1019,6 @@ mark {
   .slot-south,
   .slot-west,
   .slot-north,
-  .slot-northeast,
-  .slot-southwest,
   .slot-center {
     grid-area: auto;
   }

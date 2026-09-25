@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useSheetStore, type NewSheet } from '../stores/sheetStore'
 import type { Sheet, SheetScale, SheetStatus } from '../types/sheet'
 import { SHEET_SCALES, SHEET_STATUSES } from '../types/sheet'
-import { useSheetNeighbors } from '../hooks/useSheetNeighbors'
+import { oppositeDirection, useSheetNeighbors, type NeighborEntry } from '../hooks/useSheetNeighbors'
 import { scaleToText } from '../utils/scale'
 import ScaleTag from '../components/common/ScaleTag.vue'
 import VacantHint from '../components/common/VacantHint.vue'
@@ -26,7 +26,7 @@ function createEmptyForm(): NewSheet {
     projection: '三角测量 · 平面图',
     sheetSizeCm: '58 × 46 厘米',
     series: '新编图组',
-    neighborCodes: [],
+    neighbors: { 东: '', 南: '', 西: '', 北: '' },
     status: '待编',
   }
 }
@@ -44,21 +44,20 @@ const filteredSheets = computed(() =>
   }),
 )
 
-function neighborSummary(sheet: Sheet): string {
-  const status = getNeighborStatus(sheet.id)
-  if (status.adjacentCount === 0) {
-    return '尚未登记邻接图'
-  }
-  if (status.missingCodes.length === 0) {
-    return `邻接图 ${status.adjacentCount} 幅，馆藏齐备`
-  }
-  return `邻接图 ${status.adjacentCount} 幅，缺 ${status.missingCodes.join('、')}`
+interface SheetNeighborSummary {
+  adjacentCount: number
+  alignedCount: number
+  pending: NeighborEntry[]
+  missingCodes: string[]
 }
 
-function updateNeighborCodes(event: Event): void {
-  const target = event.target
-  if (target instanceof HTMLInputElement) {
-    form.neighborCodes = target.value.split('、').filter(Boolean)
+function neighborSummary(sheet: Sheet): SheetNeighborSummary {
+  const neighborStatus = getNeighborStatus(sheet.id)
+  return {
+    adjacentCount: neighborStatus.adjacentCount,
+    alignedCount: neighborStatus.aligned.length,
+    pending: neighborStatus.pending,
+    missingCodes: neighborStatus.missingCodes,
   }
 }
 
@@ -78,6 +77,12 @@ async function submitSheet(): Promise<void> {
     title: form.title.trim(),
     projection: form.projection.trim(),
     series: form.series.trim() || '未分组',
+    neighbors: {
+      东: form.neighbors.东.trim(),
+      南: form.neighbors.南.trim(),
+      西: form.neighbors.西.trim(),
+      北: form.neighbors.北.trim(),
+    },
   })
   resetForm()
   showCreateForm.value = false
@@ -147,12 +152,36 @@ onMounted(() => {
         <el-form-item label="图幅尺寸">
           <input v-model="form.sheetSizeCm" class="native-field" placeholder="例如：58 × 46 厘米" />
         </el-form-item>
-        <el-form-item label="邻接图号">
+        <el-form-item label="四至邻接（东）">
           <input
-            :value="form.neighborCodes?.join('、')"
+            v-model="form.neighbors.东"
             class="native-field"
-            placeholder="多个图号用中文顿号分隔"
-            @input="updateNeighborCodes"
+            data-testid="field-neighbor-east"
+            placeholder="东邻图号，暂缺留空"
+          />
+        </el-form-item>
+        <el-form-item label="四至邻接（南）">
+          <input
+            v-model="form.neighbors.南"
+            class="native-field"
+            data-testid="field-neighbor-south"
+            placeholder="南邻图号，暂缺留空"
+          />
+        </el-form-item>
+        <el-form-item label="四至邻接（西）">
+          <input
+            v-model="form.neighbors.西"
+            class="native-field"
+            data-testid="field-neighbor-west"
+            placeholder="西邻图号，暂缺留空"
+          />
+        </el-form-item>
+        <el-form-item label="四至邻接（北）">
+          <input
+            v-model="form.neighbors.北"
+            class="native-field"
+            data-testid="field-neighbor-north"
+            placeholder="北邻图号，暂缺留空"
           />
         </el-form-item>
         <div class="form-actions">
@@ -203,7 +232,33 @@ onMounted(() => {
         </div>
 
         <div class="neighbor-note mt-20">
-          <strong>四至核点：</strong>{{ neighborSummary(sheet) }}
+          <strong>四至核点：</strong>
+          <template v-if="neighborSummary(sheet).adjacentCount === 0">尚未登记邻接图</template>
+          <template v-else>
+            <span>已对齐 {{ neighborSummary(sheet).alignedCount }} 幅</span>
+            <el-tag
+              v-for="item in neighborSummary(sheet).pending"
+              :key="`${item.direction}-${item.code}`"
+              class="neighbor-note__tag"
+              type="danger"
+              effect="plain"
+              size="small"
+              data-testid="pending-neighbor"
+            >
+              待核 · {{ item.direction }}邻 {{ item.code }}
+              <template v-if="item.conflictCode">（对方{{ oppositeDirection(item.direction) }}邻已记 {{ item.conflictCode }}）</template>
+            </el-tag>
+            <el-tag
+              v-for="code in neighborSummary(sheet).missingCodes"
+              :key="code"
+              class="neighbor-note__tag"
+              type="warning"
+              effect="plain"
+              size="small"
+            >
+              缺编 {{ code }}
+            </el-tag>
+          </template>
         </div>
 
         <div class="status-row">

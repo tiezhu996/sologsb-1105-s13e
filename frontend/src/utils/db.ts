@@ -4,6 +4,12 @@ import type { PlacePair } from '../types/placePair'
 import type { ScanItem } from '../types/scan'
 import type { Sheet } from '../types/sheet'
 
+/** v3 迁移前的旧版图幅记录：邻接图号按填写先后存为数组。 */
+type LegacySheet = Omit<Sheet, 'neighbors'> & {
+  neighborCodes?: string[]
+  neighbors?: Sheet['neighbors']
+}
+
 const sheets: Sheet[] = [
   {
     id: 'sheet-bp-jia-3',
@@ -14,7 +20,7 @@ const sheets: Sheet[] = [
     projection: '三角测量 · 平面图',
     sheetSizeCm: '58 × 46 厘米',
     series: '京师实测图',
-    neighborCodes: ['北平-甲-2', '北平-甲-4', '北平-乙-3'],
+    neighbors: { 东: '北平-甲-2', 南: '北平-甲-4', 西: '北平-乙-3', 北: '' },
     status: '已编',
   },
   {
@@ -26,7 +32,7 @@ const sheets: Sheet[] = [
     projection: '三角测量 · 平面图',
     sheetSizeCm: '58 × 46 厘米',
     series: '京师实测图',
-    neighborCodes: ['北平-甲-3', '北平-乙-2', '北平-乙-4', '北平-丙-3'],
+    neighbors: { 东: '北平-甲-3', 南: '北平-乙-2', 西: '北平-乙-4', 北: '北平-丙-3' },
     status: '待核',
   },
   {
@@ -38,7 +44,7 @@ const sheets: Sheet[] = [
     projection: '多圆锥投影',
     sheetSizeCm: '52 × 44 厘米',
     series: '河北五万分一图',
-    neighborCodes: ['北平-丙-4', '北平-丙-6', '北平-丁-5'],
+    neighbors: { 东: '北平-丙-4', 南: '北平-丙-6', 西: '北平-丁-5', 北: '' },
     status: '待编',
   },
   {
@@ -50,8 +56,22 @@ const sheets: Sheet[] = [
     projection: '三角测量 · 平面图',
     sheetSizeCm: '56 × 48 厘米',
     series: '津门实测图',
-    neighborCodes: ['天津-东-1', '天津-东-3', '天津-中-2'],
+    // 自填西邻为天津-中-2，但中-2 自填东邻为天津-东-3：反向冲突，本条待核。
+    neighbors: { 东: '天津-东-1', 南: '天津-东-3', 西: '天津-中-2', 北: '' },
     status: '已编',
+  },
+  {
+    id: 'sheet-tj-zhong-2',
+    code: '天津-中-2',
+    title: '海河西岸及劝业场一带',
+    year: 1913,
+    scale: '1:5000',
+    projection: '三角测量 · 平面图',
+    sheetSizeCm: '56 × 48 厘米',
+    series: '津门实测图',
+    // 东邻已写天津-东-3，与天津-东-2 的西临登记不一致，依本幅自填为准。
+    neighbors: { 东: '天津-东-3', 南: '', 西: '天津-西-1', 北: '' },
+    status: '待核',
   },
   {
     id: 'sheet-bd-zhong-4',
@@ -62,7 +82,7 @@ const sheets: Sheet[] = [
     projection: '多圆锥投影',
     sheetSizeCm: '50 × 42 厘米',
     series: '直隶五万分一图',
-    neighborCodes: ['保定-中-3', '保定-中-5', '保定-北-4', '保定-南-4'],
+    neighbors: { 东: '保定-中-3', 南: '保定-中-5', 西: '保定-北-4', 北: '保定-南-4' },
     status: '待核',
   },
   {
@@ -74,7 +94,7 @@ const sheets: Sheet[] = [
     projection: '三角测量 · 平面图',
     sheetSizeCm: '60 × 45 厘米',
     series: '河南省城实测图',
-    neighborCodes: ['开封-城西-2', '开封-城中-1', '开封-城北-1'],
+    neighbors: { 东: '开封-城西-2', 南: '开封-城中-1', 西: '开封-城北-1', 北: '' },
     status: '已编',
   },
 ]
@@ -405,6 +425,33 @@ class GboldmapDatabase extends Dexie {
           .toCollection()
           .modify((sheet: Sheet & { schemaRev?: number }) => {
             sheet.schemaRev = 2
+          })
+      })
+
+    this.version(3)
+      .stores({
+        sheets: 'id, code, year, scale, status, series',
+        scans: 'id, sheetId, importedAt, quality',
+        placePairs: 'id, sheetId, oldName, newName, placeType, certainty',
+        histories: 'id, placePairId, period, changeType',
+      })
+      .upgrade(async (transaction) => {
+        await transaction
+          .table<LegacySheet, string>('sheets')
+          .toCollection()
+          .modify((sheet) => {
+            if (!sheet.neighbors) {
+              // 原先按填写先后存下的图号，照同样顺序落回东、南、西、北；暂缺留空。
+              const legacyCodes = Array.isArray(sheet.neighborCodes) ? sheet.neighborCodes : []
+              const [east = '', south = '', west = '', north = ''] = legacyCodes
+              sheet.neighbors = {
+                东: east || '',
+                南: south || '',
+                西: west || '',
+                北: north || '',
+              }
+            }
+            delete (sheet as Partial<LegacySheet>).neighborCodes
           })
       })
 
