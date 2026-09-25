@@ -1,12 +1,13 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { ScanItem } from '../types/scan'
-import type { Sheet } from '../types/sheet'
+import type { Sheet, SheetNeighbors } from '../types/sheet'
+import { normalizeNeighbors } from '../types/sheet'
 import { createId, db, plain } from '../utils/db'
 import { sortByYear } from '../utils/scale'
 
-export type NewSheet = Omit<Sheet, 'id' | 'neighborCodes'> & {
-  neighborCodes?: string[]
+export type NewSheet = Omit<Sheet, 'id' | 'neighbors'> & {
+  neighbors?: SheetNeighbors
 }
 export type NewScanItem = Omit<ScanItem, 'id'>
 
@@ -48,7 +49,7 @@ export const useSheetStore = defineStore('sheet', () => {
     const sheet: Sheet = {
       ...input,
       id: createId('sheet'),
-      neighborCodes: input.neighborCodes ?? [],
+      neighbors: normalizeNeighbors(input.neighbors),
     }
     await db.sheets.add(plain(sheet))
     sheets.value = sortByYear([...sheets.value, sheet]).reverse()

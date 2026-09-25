@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useSheetStore, type NewSheet } from '../stores/sheetStore'
-import type { Sheet, SheetScale, SheetStatus } from '../types/sheet'
-import { SHEET_SCALES, SHEET_STATUSES } from '../types/sheet'
+import type { Sheet, SheetNeighbors, SheetScale, SheetStatus } from '../types/sheet'
+import { SHEET_SCALES, SHEET_STATUSES, createEmptyNeighbors } from '../types/sheet'
 import { useSheetNeighbors } from '../hooks/useSheetNeighbors'
 import { scaleToText } from '../utils/scale'
 import ScaleTag from '../components/common/ScaleTag.vue'
@@ -11,13 +11,15 @@ import VacantHint from '../components/common/VacantHint.vue'
 const sheetStore = useSheetStore()
 const { getNeighborStatus } = useSheetNeighbors('')
 
+type SheetForm = Omit<NewSheet, 'neighbors'> & { neighbors: SheetNeighbors }
+
 const yearFilter = ref('全部')
 const scaleFilter = ref<SheetScale | '全部'>('全部')
 const statusFilter = ref<SheetStatus | '全部'>('全部')
 const showCreateForm = ref(false)
 const formError = ref('')
 
-function createEmptyForm(): NewSheet {
+function createEmptyForm(): SheetForm {
   return {
     code: '',
     title: '',
@@ -26,12 +28,12 @@ function createEmptyForm(): NewSheet {
     projection: '三角测量 · 平面图',
     sheetSizeCm: '58 × 46 厘米',
     series: '新编图组',
-    neighborCodes: [],
+    neighbors: createEmptyNeighbors(),
     status: '待编',
   }
 }
 
-const form = reactive<NewSheet>(createEmptyForm())
+const form = reactive<SheetForm>(createEmptyForm())
 
 const years = computed(() => [...new Set(sheetStore.sheets.map((sheet) => sheet.year))].sort((a, b) => b - a))
 
@@ -49,17 +51,21 @@ function neighborSummary(sheet: Sheet): string {
   if (status.adjacentCount === 0) {
     return '尚未登记邻接图'
   }
-  if (status.missingCodes.length === 0) {
-    return `邻接图 ${status.adjacentCount} 幅，馆藏齐备`
+  const parts = [`邻接图 ${status.adjacentCount} 幅`, `已对齐 ${status.alignedEntries.length} 幅`]
+  if (status.oneSidedEntries.length) {
+    parts.push(`单向登记 ${status.oneSidedEntries.length} 幅`)
   }
-  return `邻接图 ${status.adjacentCount} 幅，缺 ${status.missingCodes.join('、')}`
+  if (status.pendingEntries.length) {
+    parts.push(`待核 ${status.pendingEntries.length} 条（${status.pendingEntries.map((entry) => entry.code).join('、')}）`)
+  }
+  if (status.missingCodes.length) {
+    parts.push(`缺编 ${status.missingCodes.join('、')}`)
+  }
+  return parts.join('，')
 }
 
-function updateNeighborCodes(event: Event): void {
-  const target = event.target
-  if (target instanceof HTMLInputElement) {
-    form.neighborCodes = target.value.split('、').filter(Boolean)
-  }
+function pendingNeighborCount(sheet: Sheet): number {
+  return getNeighborStatus(sheet.id).pendingEntries.length
 }
 
 function resetForm(): void {
@@ -147,13 +153,17 @@ onMounted(() => {
         <el-form-item label="图幅尺寸">
           <input v-model="form.sheetSizeCm" class="native-field" placeholder="例如：58 × 46 厘米" />
         </el-form-item>
-        <el-form-item label="邻接图号">
-          <input
-            :value="form.neighborCodes?.join('、')"
-            class="native-field"
-            placeholder="多个图号用中文顿号分隔"
-            @input="updateNeighborCodes"
-          />
+        <el-form-item label="东邻图号">
+          <input v-model="form.neighbors.east" class="native-field" data-testid="field-neighbor-east" placeholder="暂缺可留空" />
+        </el-form-item>
+        <el-form-item label="南邻图号">
+          <input v-model="form.neighbors.south" class="native-field" data-testid="field-neighbor-south" placeholder="暂缺可留空" />
+        </el-form-item>
+        <el-form-item label="西邻图号">
+          <input v-model="form.neighbors.west" class="native-field" data-testid="field-neighbor-west" placeholder="暂缺可留空" />
+        </el-form-item>
+        <el-form-item label="北邻图号">
+          <input v-model="form.neighbors.north" class="native-field" data-testid="field-neighbor-north" placeholder="暂缺可留空" />
         </el-form-item>
         <div class="form-actions">
           <el-button @click="showCreateForm = false; resetForm()">取消</el-button>
@@ -204,6 +214,15 @@ onMounted(() => {
 
         <div class="neighbor-note mt-20">
           <strong>四至核点：</strong>{{ neighborSummary(sheet) }}
+          <el-tag
+            v-if="pendingNeighborCount(sheet)"
+            class="neighbor-note__tag"
+            type="warning"
+            size="small"
+            effect="dark"
+          >
+            待核 {{ pendingNeighborCount(sheet) }} 条
+          </el-tag>
         </div>
 
         <div class="status-row">

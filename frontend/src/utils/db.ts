@@ -14,7 +14,7 @@ const sheets: Sheet[] = [
     projection: '三角测量 · 平面图',
     sheetSizeCm: '58 × 46 厘米',
     series: '京师实测图',
-    neighborCodes: ['北平-甲-2', '北平-甲-4', '北平-乙-3'],
+    neighbors: { east: '北平-甲-2', south: '北平-甲-4', west: '北平-乙-3', north: '' },
     status: '已编',
   },
   {
@@ -26,8 +26,32 @@ const sheets: Sheet[] = [
     projection: '三角测量 · 平面图',
     sheetSizeCm: '58 × 46 厘米',
     series: '京师实测图',
-    neighborCodes: ['北平-甲-3', '北平-乙-2', '北平-乙-4', '北平-丙-3'],
+    neighbors: { east: '北平-甲-3', south: '北平-乙-2', west: '北平-乙-4', north: '北平-丙-3' },
     status: '待核',
+  },
+  {
+    id: 'sheet-bp-jia-4',
+    code: '北平-甲-4',
+    title: '崇文门外大街及天坛北坛墙图',
+    year: 1907,
+    scale: '1:5000',
+    projection: '三角测量 · 平面图',
+    sheetSizeCm: '58 × 46 厘米',
+    series: '京师实测图',
+    neighbors: { east: '', south: '', west: '', north: '北平-甲-5' },
+    status: '待核',
+  },
+  {
+    id: 'sheet-bp-bing-3',
+    code: '北平-丙-3',
+    title: '东直门外及北新仓一带图',
+    year: 1921,
+    scale: '1:5000',
+    projection: '三角测量 · 平面图',
+    sheetSizeCm: '58 × 46 厘米',
+    series: '京师实测图',
+    neighbors: { east: '', south: '', west: '', north: '' },
+    status: '待编',
   },
   {
     id: 'sheet-bp-bing-5',
@@ -38,7 +62,7 @@ const sheets: Sheet[] = [
     projection: '多圆锥投影',
     sheetSizeCm: '52 × 44 厘米',
     series: '河北五万分一图',
-    neighborCodes: ['北平-丙-4', '北平-丙-6', '北平-丁-5'],
+    neighbors: { east: '北平-丙-4', south: '北平-丙-6', west: '北平-丁-5', north: '' },
     status: '待编',
   },
   {
@@ -50,7 +74,7 @@ const sheets: Sheet[] = [
     projection: '三角测量 · 平面图',
     sheetSizeCm: '56 × 48 厘米',
     series: '津门实测图',
-    neighborCodes: ['天津-东-1', '天津-东-3', '天津-中-2'],
+    neighbors: { east: '天津-东-1', south: '天津-东-3', west: '天津-中-2', north: '' },
     status: '已编',
   },
   {
@@ -62,7 +86,7 @@ const sheets: Sheet[] = [
     projection: '多圆锥投影',
     sheetSizeCm: '50 × 42 厘米',
     series: '直隶五万分一图',
-    neighborCodes: ['保定-中-3', '保定-中-5', '保定-北-4', '保定-南-4'],
+    neighbors: { east: '保定-中-3', south: '保定-中-5', west: '保定-北-4', north: '保定-南-4' },
     status: '待核',
   },
   {
@@ -74,7 +98,7 @@ const sheets: Sheet[] = [
     projection: '三角测量 · 平面图',
     sheetSizeCm: '60 × 45 厘米',
     series: '河南省城实测图',
-    neighborCodes: ['开封-城西-2', '开封-城中-1', '开封-城北-1'],
+    neighbors: { east: '开封-城西-2', south: '开封-城中-1', west: '开封-城北-1', north: '' },
     status: '已编',
   },
 ]
@@ -405,6 +429,28 @@ class GboldmapDatabase extends Dexie {
           .toCollection()
           .modify((sheet: Sheet & { schemaRev?: number }) => {
             sheet.schemaRev = 2
+          })
+      })
+
+    // 旧版 neighborCodes 按填写先后硬套东、南、西、北，这里按原顺序落回四个方向。
+    this.version(3)
+      .stores({
+        sheets: 'id, code, year, scale, status, series',
+        scans: 'id, sheetId, importedAt, quality',
+        placePairs: 'id, sheetId, oldName, newName, placeType, certainty',
+        histories: 'id, placePairId, period, changeType',
+      })
+      .upgrade(async (transaction) => {
+        await transaction
+          .table<Sheet, string>('sheets')
+          .toCollection()
+          .modify((sheet: Sheet & { neighborCodes?: string[]; schemaRev?: number }) => {
+            if (Array.isArray(sheet.neighborCodes)) {
+              const [east = '', south = '', west = '', north = ''] = sheet.neighborCodes
+              sheet.neighbors = { east, south, west, north }
+              delete sheet.neighborCodes
+            }
+            sheet.schemaRev = 3
           })
       })
 
